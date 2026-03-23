@@ -84,6 +84,12 @@ impl Cli {
 
 #[tokio::main]
 async fn main() {
+    // Initialise tracing (off by default; controlled by RUST_LOG env var).
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .try_init();
+
     let cli = Cli::parse();
 
     if let Err(e) = run(&cli) {
