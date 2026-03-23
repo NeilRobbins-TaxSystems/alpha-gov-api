@@ -1,0 +1,6 @@
+# Claude Code - local/personal config
+.claude/settings.local.json
+.claude/plans/
+
+# Rust build artifacts
+target/
