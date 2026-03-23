@@ -141,11 +141,12 @@ async fn authenticate_authorization_code(
                 }
                 return Ok(bearer_header(&resp.access_token));
             }
-            Err(_) => {
-                // Refresh failed — clear and fall through to full flow
+            Err(crate::error::AuthError::TokenRefreshFailed { .. }) => {
+                // Refresh rejected (4xx) — clear stored refresh token and fall through
                 token_store.clear(TOKEN_KEY_AUTH_CODE);
                 let _ = crate::config::delete_credential(config, "hmrc.refresh_token");
             }
+            Err(e) => return Err(e.into()),
         }
     }
 
@@ -170,13 +171,17 @@ async fn authenticate_authorization_code(
         reqwest::Url::parse(&auth.authorize_url).map_err(|e| AuthError::CallbackServerFailed {
             detail: format!("invalid authorize URL: {e}"),
         })?;
-    authorize_url
-        .query_pairs_mut()
-        .append_pair("response_type", "code")
-        .append_pair("client_id", &auth.client_id)
-        .append_pair("redirect_uri", &redirect_uri)
-        .append_pair("state", &state)
-        .append_pair("scope", &scope_str);
+    {
+        let mut pairs = authorize_url.query_pairs_mut();
+        pairs
+            .append_pair("response_type", "code")
+            .append_pair("client_id", &auth.client_id)
+            .append_pair("redirect_uri", &redirect_uri)
+            .append_pair("state", &state);
+        if !scope_str.is_empty() {
+            pairs.append_pair("scope", &scope_str);
+        }
+    }
     let authorize_url = authorize_url.to_string();
 
     eprintln!("Open this URL to authorize:\n  {authorize_url}");
