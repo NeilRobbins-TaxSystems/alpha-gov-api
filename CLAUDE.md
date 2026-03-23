@@ -6,21 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **alpha-gov-api** is a Rust CLI tool that exposes UK government APIs (Companies House, HMRC, Trade/Tariff, DEFRA, GOV.UK platform) as structured JSON interfaces for agentic AI consumption. It lives in the TaxSystems GitHub organisation.
 
-The Rust project has not yet been scaffolded. Phase 0 (project foundation) is the first implementation milestone. See `docs/plan.md` for the full phased plan and GitHub issues for tracked work items.
+Rust edition 2024, workspace resolver 3. See `docs/plan.md` for the full phased plan and GitHub issues for tracked work items.
 
-## Build & Test (once scaffolded)
+## Build & Test
 
 ```bash
-cargo build                    # build
-cargo test                     # all tests
-cargo test <test_name>         # single test
-cargo clippy                   # lint
-cargo fmt --check              # format check
+rustup run stable cargo build          # build
+rustup run stable cargo test           # all tests
+rustup run stable cargo test <name>    # single test
+rustup run stable cargo clippy         # lint
+rustup run stable cargo fmt --check    # format check
 ```
 
-## Architecture (planned)
+**Note:** Use `rustup run stable` prefix — the bash shell proxy may resolve an older toolchain version on Windows. Edition 2024 requires Rust 1.85+.
 
-**Binary:** `alpha-gov-api` — single CLI binary using `clap` (derive macros) for argument parsing.
+## Architecture
+
+**Workspace layout:** `crates/alpha-gov-api` (binary) and `crates/alpha-gov-api-core` (library).
+
+**Binary crate** (`alpha-gov-api`) — CLI using `clap` derive macros. Global flags: `--pretty`, `--quiet`, `--config`, `--profile`, `--sandbox`, `--dry-run`.
+
+**Core crate** (`alpha-gov-api-core`) — output contract (`ApiResponse<T>`, `ApiErrorResponse`), config/credential management, error types.
 
 **Command hierarchy:** Top-level subcommands group by provider, then resource:
 - `ch` — Companies House (`ch company get`, `ch officers list`, `ch stream filings`, `ch file submit`, `ch xmlgw submit`)
@@ -41,9 +47,11 @@ Error:   { "ok": false, "error": { "code", "message", "api_status", "api" } }
 
 ## Configuration
 
-Config file: `~/.config/alpha-gov-api/config.toml` (or platform equivalent)
+Config file: platform-appropriate path via `dirs` crate (`%APPDATA%` on Windows, `~/.config` on Linux, `~/Library/Application Support` on macOS). TOML format with `[defaults]`, `[profile.*]`, and `[credentials]` sections.
 
 Environment variable prefix: `ALPHA_GOV_API_` (e.g., `ALPHA_GOV_API_CH_KEY`, `ALPHA_GOV_API_HMRC_CLIENT_ID`)
+
+**Credential resolution order:** env vars > OS keychain (`keyring` crate) > plaintext TOML `[credentials]` section.
 
 ## Authentication patterns
 
