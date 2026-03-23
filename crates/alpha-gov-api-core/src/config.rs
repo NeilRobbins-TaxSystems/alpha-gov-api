@@ -15,6 +15,7 @@ const CREDENTIAL_KEYS: &[(&str, &str)] = &[
     ("hmrc.client_id", "ALPHA_GOV_API_HMRC_CLIENT_ID"),
     ("hmrc.client_secret", "ALPHA_GOV_API_HMRC_CLIENT_SECRET"),
     ("hmrc.server_token", "ALPHA_GOV_API_HMRC_SERVER_TOKEN"),
+    ("hmrc.refresh_token", "ALPHA_GOV_API_HMRC_REFRESH_TOKEN"),
     ("govgateway.user_id", "ALPHA_GOV_API_GOVGATEWAY_USER_ID"),
     ("govgateway.password", "ALPHA_GOV_API_GOVGATEWAY_PASSWORD"),
 ];
