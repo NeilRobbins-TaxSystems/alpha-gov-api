@@ -26,10 +26,10 @@ impl TokenStore {
     pub fn get_valid_token(&self, key: &str) -> Option<String> {
         let tokens = self.tokens.lock().unwrap();
         let entry = tokens.get(key)?;
-        if let Some(expires_at) = entry.expires_at {
-            if Instant::now() + Duration::from_secs(EXPIRY_BUFFER_SECS) >= expires_at {
-                return None;
-            }
+        if let Some(expires_at) = entry.expires_at
+            && Instant::now() + Duration::from_secs(EXPIRY_BUFFER_SECS) >= expires_at
+        {
+            return None;
         }
         Some(entry.access_token.clone())
     }
@@ -125,7 +125,12 @@ mod tests {
     #[test]
     fn get_refresh_token() {
         let store = TokenStore::new();
-        store.store_token("hmrc", "access".into(), Some(3600), Some("refresh-tok".into()));
+        store.store_token(
+            "hmrc",
+            "access".into(),
+            Some(3600),
+            Some("refresh-tok".into()),
+        );
         assert_eq!(store.get_refresh_token("hmrc"), Some("refresh-tok".into()));
     }
 
