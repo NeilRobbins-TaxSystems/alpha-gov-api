@@ -28,6 +28,14 @@ rustup run stable cargo fmt --check    # format check
 
 **Core crate** (`alpha-gov-api-core`) — output contract (`ApiResponse<T>`, `ApiErrorResponse`), config/credential management, error types.
 
+**HTTP client** (`http` module in core crate) — `HttpClient` with retry (3 attempts, exponential backoff on 429/5xx/timeouts), reactive rate-limiting (reads `X-RateLimit-Remaining`/`Retry-After` headers), in-memory ETag/Last-Modified cache. Returns raw `Bytes` via `HttpResponse`; callers deserialize.
+
+**Auth module** (`auth` submodule in core crate) — `authenticate()` dispatches to the correct flow based on `AuthMethod` enum: `ApiKey` (CH HTTP Basic), `ClientCredentials` (HMRC application-restricted OAuth), `AuthorizationCode` (HMRC user-restricted OAuth with local callback server). Token exchange calls use bare `reqwest::Client` (not `HttpClient`) to avoid error-domain conflicts. `TokenStore` caches tokens in-memory with 30s expiry buffer. Refresh tokens persisted to credential store.
+
+**Error hierarchy:** `AppError` has boxed sub-enum variants (`Config(Box<ConfigError>)`, `Http(Box<HttpError>)`, `Auth(Box<AuthError>)`). New error domains follow this pattern: define a `FooError` enum, add `AppError::Foo(Box<FooError>)` variant, implement `From<FooError> for AppError`.
+
+**Tracing:** Core crate emits `tracing` spans/events. Binary initialises `tracing-subscriber` (off by default, controlled by `RUST_LOG` env var, human-readable to stderr). Use `try_init()` not `init()` to avoid panics in tests.
+
 **Command hierarchy:** Top-level subcommands group by provider, then resource:
 - `ch` — Companies House (`ch company get`, `ch officers list`, `ch stream filings`, `ch file submit`, `ch xmlgw submit`)
 - `hmrc` — HMRC (`hmrc vat obligations`, `hmrc customs declaration submit`, `hmrc gvms gmr create`)
@@ -43,7 +51,7 @@ Error:   { "ok": false, "error": { "code", "message", "api_status", "api" } }
 
 **Global flags:** `--output json|pretty|compact`, `--quiet`, `--config <path>`, `--profile <name>`, `--sandbox`, `--dry-run`
 
-**Key crates (planned):** `clap` (CLI), `reqwest` (HTTP), `serde`/`serde_json` (serialisation), `tokio` (async runtime), `tracing` (logging), `wiremock` (test mocks)
+**Key crates:** `clap` (CLI), `reqwest` (HTTP), `serde`/`serde_json` (serialisation), `tokio` (async runtime), `tracing` (logging), `wiremock` (test mocks)
 
 ## Configuration
 
@@ -62,6 +70,8 @@ Three auth mechanisms across the APIs:
 
 Sandbox endpoints use `test-api.service.hmrc.gov.uk` (HMRC) and `api-sandbox.company-information.service.gov.uk` (CH).
 
+The `auth::authenticate()` function is the single entry point. It returns a `HeaderMap` with the `Authorization` header. Callers merge this into their request before sending via `HttpClient`.
+
 ## API documentation
 
 - `docs/uk-government-apis.md` — index of all ~40 APIs with utility summaries and links to detail files
@@ -69,6 +79,13 @@ Sandbox endpoints use `test-api.service.hmrc.gov.uk` (HMRC) and `api-sandbox.com
 - `docs/plan.md` — phased integration plan with CLI command specifications
 
 Read the index file to identify relevant APIs. Read the detail file only for the specific category you need — avoid loading all 12 into context.
+
+## Testing patterns
+
+- All dependencies must be declared in `[workspace.dependencies]` and referenced via `{ workspace = true }` in crate manifests.
+- Tests use `wiremock::MockServer` for HTTP integration tests. Use zero-duration backoffs (`backoff_ms: vec![0, 0, 0]`) in `HttpClient` tests for speed.
+- **Do not use `tokio::time::pause()` with reqwest** — pausing tokio time causes reqwest's client timeout to fire immediately during backoff sleeps. Use configurable zero-duration backoffs instead.
+- Edition 2024 supports let-chains in `if let` — clippy will suggest collapsing nested `if let`/`if let Ok` blocks.
 
 ## GitHub structure
 
