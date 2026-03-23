@@ -64,6 +64,11 @@ Read the index file to identify relevant APIs. Read the detail file only for the
 
 ## GitHub structure
 
+**Repositories:**
+- **Origin:** `TaxSystems/alpha-gov-api` — master branch is protected (requires approving review to push)
+- **Working copy:** `NeilRobbins-TaxSystems/alpha-gov-api` — no branch protection, use for direct pushes
+- Git remote `personal` points to the working copy repo
+
 - **Milestones:** Phase 0 through Phase 9 (10 milestones)
 - **Issues:** 44 epic issues, each with task checklists — numbered to match plan sections (e.g., issue "1.1 Company profile commands" maps to plan section 1.1)
 - **Labels:** `phase-0` through `phase-9`, `epic`, `enhancement`, `infrastructure`, `testing`, `documentation`

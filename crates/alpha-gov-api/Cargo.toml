@@ -1,0 +1,13 @@
+[package]
+name = "alpha-gov-api"
+version = "0.1.0"
+description = "Government APIs as structured JSON for agentic AI consumption"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+alpha-gov-api-core = { path = "../alpha-gov-api-core" }
+clap = { version = "4", features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
