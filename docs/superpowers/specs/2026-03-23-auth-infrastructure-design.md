@@ -47,7 +47,10 @@ pub struct AuthorizationCodeAuth {
     pub client_secret: String,
     pub authorize_url: String,
     pub token_url: String,
-    pub redirect_port: u16,
+    /// Port for the local callback server. `None` means bind to any available port.
+    /// Note: HMRC requires redirect URIs to be pre-registered, so a fixed port
+    /// (e.g. 9004) is typical for production use. Ephemeral (None/0) is for tests.
+    pub redirect_port: Option<u16>,
     pub scopes: Vec<String>,
 }
 ```
@@ -85,6 +88,8 @@ pub async fn authenticate(
     config: &AppConfig,
 ) -> Result<HeaderMap>
 ```
+
+**Why `&reqwest::Client` and not `&HttpClient`:** Token exchange and refresh calls are one-shot operations that must not use `HttpClient::send()`. The `HttpClient` wrapper treats 401 as `HttpError::Auth` (a non-retryable HTTP-level error), but a 401 from a token endpoint means "bad credentials" and must map to `AuthError::TokenExchangeFailed` instead. Using the bare `reqwest::Client` lets the auth module inspect responses directly and produce the correct `AuthError` variants. Callers pass `client.inner()`.
 
 Returns an `Authorization` header ready to merge into a request:
 - `ApiKey` -> `Authorization: Basic base64(api_key + ":")`
@@ -125,17 +130,18 @@ No token caching needed — the key is static.
 
 1. Check `TokenStore` for a valid cached token.
 2. If valid, return it.
-3. If expired but refresh token exists, attempt refresh (see below).
-4. If no token at all, run the full authorization code flow:
+3. If no cached token, attempt to load refresh token from credential store via `get_credential(config, "hmrc.refresh_token")` and attempt refresh (see below).
+4. If expired but `TokenStore` has a refresh token, attempt refresh (see below).
+5. If no token and no refresh token, run the full authorization code flow:
 
 **Full flow:**
 1. Generate random 32-byte hex `state` parameter (CSRF protection).
-2. Bind `tokio::net::TcpListener` on `127.0.0.1:{redirect_port}`.
+2. Bind `tokio::net::TcpListener` on `127.0.0.1:{redirect_port}` (or port 0 if `None`). Record the actual bound port for the redirect URI.
 3. Build authorize URL: `{authorize_url}?response_type=code&client_id={id}&redirect_uri=http://localhost:{port}/callback&state={state}&scope={scopes}`.
 4. Print the URL to stderr (for headless environments).
 5. Open browser via `open::that()`.
-6. Accept one TCP connection, read the HTTP request line and headers.
-7. Parse query string from the GET request path.
+6. Loop: accept TCP connections. For each connection, read the HTTP request line. If the request path does not start with `/callback` or does not contain a `code` query parameter (e.g. browser favicon request), respond with 404 and continue listening. This handles browsers that send ancillary requests before/after the callback.
+7. When a request to `/callback` with a `code` parameter arrives, parse the full query string.
 8. Verify `state` matches the generated value; extract `code`. If `error` parameter present, return `AuthError`.
 9. Write HTTP 200 response with HTML success page ("You can close this tab"), close connection, drop listener.
 10. Exchange code for tokens: POST to `token_url` with `grant_type=authorization_code`, `code`, `redirect_uri`, `client_id`, `client_secret`.
@@ -190,6 +196,30 @@ Auth(Box<AuthError>),
 ```
 
 With `From<AuthError> for AppError` producing `AppError::Auth(Box::new(e))`.
+
+Add `downcast_auth()` helper on `AppError` (analogous to existing `downcast_http()`) for use in tests:
+```rust
+pub fn downcast_auth(self) -> Option<Box<AuthError>> {
+    match self {
+        AppError::Auth(e) => Some(e),
+        _ => None,
+    }
+}
+```
+
+**Note on `AppError::Auth` vs `HttpError::Auth`:** These are distinct error domains. `HttpError::Auth` means "the API returned 401/403 for a data request." `AppError::Auth(AuthError)` means "the authentication/token infrastructure itself failed." They do not conflict because token exchange calls use `reqwest::Client` directly (not `HttpClient`), so token-endpoint 401s never become `HttpError::Auth`.
+
+## Config Changes
+
+Add `hmrc.refresh_token` to `CREDENTIAL_KEYS` in `config.rs`:
+```rust
+("hmrc.refresh_token", "ALPHA_GOV_API_HMRC_REFRESH_TOKEN"),
+```
+This ensures `config show` displays its status and allows env-var override.
+
+## TokenStore Ownership
+
+The `TokenStore` is constructed in the CLI binary's `run()` function and passed by reference to `authenticate()`. It lives for the duration of a single CLI invocation. Since CLI commands are short-lived processes, the in-memory cache primarily helps commands that make multiple authenticated requests in one run (e.g. paginated API calls). No `Arc` or cross-process sharing is needed.
 
 ## New Dependencies
 
