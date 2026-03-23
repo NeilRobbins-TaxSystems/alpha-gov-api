@@ -4,6 +4,9 @@ pub mod error;
 pub mod http;
 pub mod output;
 
+pub use auth::{
+    ApiKeyAuth, AuthMethod, AuthorizationCodeAuth, ClientCredentialsAuth, TokenStore, authenticate,
+};
 pub use config::{AppConfig, ConfigDisplay, ConfigFile, CredentialSource, Settings};
 pub use error::{AppError, AuthError, ConfigError, HttpError, Result};
 pub use http::{HttpClient, HttpClientConfig, HttpResponse};
